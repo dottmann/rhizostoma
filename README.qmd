@@ -1,0 +1,93 @@
+---
+title: "Rhizostoma pulmo ephyrae: growth and morphological transition"
+author:
+  - name: Daniel Ottmann
+    email: daniel.ottmann.riera@gmail.com
+date: "October 2026"
+format:
+  html:
+    toc: true
+    toc-depth: 2
+    theme: cosmo
+    embed-resources: true
+---
+
+## Overview
+
+R pipeline analysing the first 30 days of growth of 19 *Rhizostoma pulmo* ephyrae reared individually in culture. It estimates growth from each individual's fitted trajectory, identifies the age at which body shape changes (the ephyra-to-metaephyra transition) from the ratio of central disc diameter to total body diameter, and describes how variable each of four morphometric measurements is.
+
+## Experimental design that the analysis accounts for
+
+-   **Individuals:** 19 ephyrae, each from a different polyp, followed individually from release (day 0, \< 24 h old) to day 30.
+-   **Staggered batches:** ephyrae were released in three batches on different calendar days. Measurements were taken on Mondays, Wednesdays and Fridays, so on any given day-age only a subset of individuals was measured (n = 7–18).
+-   **Weekends:** ephyrae were neither fed nor measured on Saturdays and Sundays. The script reconstructs each individual's weekday calendar from its measurement dates (a 3-day gap always spans a weekend).
+-   **Data correction:** for ephyra 8, TBD, CDD and TMLL were entered at day 12 but LW at day 13. Day 12 falls on a Sunday in that batch's calendar, so the record is reassigned to day 13 in the script.
+
+Because of this unbalanced, repeated-measures design, the pipeline does **not** estimate growth from consecutive day-to-day differences or from regressions on daily means.
+
+## Directory tree
+
+``` text
+├── scripts/
+│   └── rhizostoma.R
+├── data/
+│   ├── tbl.txt     # total body diameter (TBD; labelled TBL in the raw files)
+│   ├── cdd.txt     # central disc diameter
+│   ├── tmll.txt    # total marginal lappet length
+│   └── lw.txt      # lappet width
+├── plots/          # created by the script
+└── output/         # created by the script
+```
+
+Raw files are tab-delimited, one row per ephyra (`id`) and one column per day-age (`Day 0` … `Day 30`), blank where not measured.
+
+## Metrics
+
+-   **TBD:** total body diameter, lappet tip to opposite lappet tip (Straehler-Pohl & Jarms 2010)
+-   **CDD:** central disc diameter
+-   **TMLL:** total marginal lappet length, from the disc margin to the lappet tip
+-   **LW:** lappet width
+
+Geometrically TBD ≈ CDD + 2·TMLL; the script uses this identity as an internal consistency check.
+
+## Pipeline
+
+1.  **Load and clean.** Reshape the four files to long format, apply the id 8 correction and assign batches and unfed (weekend) days.
+2.  **Daily summary.** n, mean, SD and coefficient of variation (CV = 100·SD/mean) per metric and day-age. Daily CV describes **between-individual relative variability at a given age**, which includes biological variability as well as measurement error, so it is not a direct measure of measurement precision.
+3.  **Internal consistency.** Distribution of (CDD + 2·TMLL)/TBD and its trend with age.
+4.  **Growth from individual fitted trajectories.** For each metric, linear, quadratic and exponential (log-linear) mixed-effects models with a random intercept and slope per ephyra are compared by AIC (maximum likelihood; the exponential model's AIC is put on the original scale with a Jacobian correction; linear is preferred when within 2 AIC units). From each ephyra's fitted trajectory, over the days it was actually measured:
+    -   absolute growth rate, AGR = (L_end − L_start)/Δt, in mm d⁻¹
+    -   specific growth rate, SGR = 100·ln(L_end/L_start)/Δt, in % d⁻¹
+    -   for TMLL (dome-shaped), the age of maximum projected lappet length
+5.  **Morphological transition.** A broken-stick mixed model of CDD/TBD against age; the breakpoint is estimated by profile likelihood with an approximate 95% CI and compared by AIC with a straight line and with smooth quadratic and cubic curves (the estimated breakpoint counted as one extra parameter), to test whether the change is abrupt rather than a gradual acceleration. Breakpoints are also fitted per ephyra (least squares, ≥ 3 points each side) to describe developmental asynchrony, and correlated with the individual TMLL peak.
+6.  **Variability of each measurement.** n-weighted mean daily CV (overall, before and after the breakpoint) and within-individual residual CV around each ephyra's own trajectory. The residual CV combines measurement error and short-term fluctuations and is the closest available proxy for measurement repeatability, since no specimen was imaged repeatedly.
+7.  **Weekend diagnostic.** SGR between consecutive measurements, compared between intervals that did or did not include an unfed weekend (mixed model with age as covariate and ephyra as random effect). Used only to document the weekly feeding cycle.
+
+## Outputs
+
+**Figures (`plots/`)**
+
+-   `figure_2.png` / `.tiff` (175 mm wide, 600 dpi):
+    -   **A:** individual trajectories and population fits for the four metrics
+    -   **B:** CDD/TBD with the fitted breakpoint, its 95% CI and individual breakpoints along the x-axis
+-   `figure_S1.png`: interval SGR by age, weekend vs weekday intervals (supplementary)
+
+Colours are the Okabe-Ito colour-blind-safe set and match the measurement arrows in Fig. 1 (blue TBD, vermillion CDD, green TMLL, orange LW).
+
+**Tables (`output/`)**
+
+| File | Content |
+|----|----|
+| `daily_summary.csv` | n, mean, SD, CV per metric and day-age |
+| `trajectory_model_aic.csv` | AIC of the candidate trajectory models |
+| `trajectory_equations.csv` | Fixed-effect equations of the selected models |
+| `growth_individual.csv` / `growth_summary.csv` | AGR and SGR per ephyra and summarised |
+| `ratio_model_aic.csv` | CDD/TBD: broken-stick vs straight line, quadratic and cubic (AIC) |
+| `individual_transition.csv` | Individual CDD/TBD breakpoints and TMLL peak ages |
+| `variability_table.csv` | Daily CV (overall, before/after transition) and residual CV |
+| `weekend_effect.csv` | Interval SGR for weekend vs weekday intervals |
+| `console_log.txt` | Full console output when the script is run with output redirected |
+
+## Requirements
+
+R (≥ 4.1) with `tidyverse`, `lme4` and `patchwork`; `rstudioapi` only when run inside RStudio.
